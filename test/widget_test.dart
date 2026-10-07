@@ -1,9 +1,16 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:laurel_lake_dashboard/main.dart';
+import 'package:laurel_lake_dashboard/repositories/dashboard_repository.dart';
+import 'package:scrollable_clean_calendar/scrollable_clean_calendar.dart';
 
 void main() {
   testWidgets('renders the executive overview', (tester) async {
-    await tester.pumpWidget(const LaurelLakeDashboardApp());
+    await tester.pumpWidget(
+      LaurelLakeDashboardApp(
+        repository: DemoDashboardRepository(now: () => DateTime(2026, 9, 30)),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Executive overview'), findsOneWidget);
@@ -22,5 +29,33 @@ void main() {
     expect(find.text('Labor cost by day'), findsOneWidget);
     expect(find.text('Employee labor detail'), findsOneWidget);
     expect(find.text('Avery Brooks'), findsOneWidget);
+  });
+
+  testWidgets('October shortcut selects current month through today', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      LaurelLakeDashboardApp(
+        repository: DemoDashboardRepository(now: () => DateTime(2026, 10, 7)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('October 1–7, 2026'), findsOneWidget);
+    await tester.tap(find.text('October 1–7, 2026'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ActionChip, 'September'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ActionChip, 'October'));
+    await tester.pumpAndSettle();
+    final calendar = tester.widget<ScrollableCleanCalendar>(
+      find.byType(ScrollableCleanCalendar),
+    );
+    expect(calendar.calendarController.maxDate, DateTime(2026, 10, 7));
+    expect(calendar.calendarController.rangeMinDate, DateTime(2026, 10));
+    expect(calendar.calendarController.rangeMaxDate, DateTime(2026, 10, 7));
+    await tester.tap(find.text('Apply range'));
+    await tester.pumpAndSettle();
+    expect(find.text('October 1–7, 2026'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

@@ -7,7 +7,7 @@ sealed class DashboardState {
 }
 
 class DashboardInitial extends DashboardState {
-  DashboardInitial() : super(range: DashboardDateRange.month(2026, 9));
+  const DashboardInitial({required super.range});
 }
 
 class DashboardLoading extends DashboardState {

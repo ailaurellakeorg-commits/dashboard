@@ -13,7 +13,9 @@ void main() {
 }
 
 class LaurelLakeDashboardApp extends StatelessWidget {
-  const LaurelLakeDashboardApp({super.key});
+  const LaurelLakeDashboardApp({super.key, this.repository});
+
+  final DashboardRepository? repository;
 
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -22,7 +24,7 @@ class LaurelLakeDashboardApp extends StatelessWidget {
     theme: AppTheme.light,
     home: BlocProvider(
       create: (_) =>
-          DashboardBloc(repository: DemoDashboardRepository())
+          DashboardBloc(repository: repository ?? DemoDashboardRepository())
             ..add(const DashboardLoadRequested()),
       child: const DashboardScreen(),
     ),

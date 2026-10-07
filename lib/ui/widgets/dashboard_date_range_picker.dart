@@ -63,8 +63,15 @@ class _DashboardDateRangeDialogState extends State<_DashboardDateRangeDialog> {
     super.dispose();
   }
 
-  void _selectMonth(int month) {
-    final range = DashboardDateRange.month(2026, month);
+  void _selectMonth(DateTime month) {
+    final fullMonth = DashboardDateRange.month(month.year, month.month);
+    final available = widget.availableRange;
+    final range = DashboardDateRange(
+      start: fullMonth.start.isBefore(available.start)
+          ? available.start
+          : fullMonth.start,
+      end: fullMonth.end.isAfter(available.end) ? available.end : fullMonth.end,
+    );
     _controller
       ..clearSelectedDates()
       ..onDayClick(range.start)
@@ -78,6 +85,15 @@ class _DashboardDateRangeDialogState extends State<_DashboardDateRangeDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final available = widget.availableRange;
+    final months = <DateTime>[
+      for (
+        var month = DateTime(available.start.year, available.start.month);
+        !month.isAfter(available.end);
+        month = DateTime(month.year, month.month + 1)
+      )
+        month,
+    ];
     final height = (MediaQuery.sizeOf(context).height * .82).clamp(
       500.0,
       760.0,
@@ -124,15 +140,22 @@ class _DashboardDateRangeDialogState extends State<_DashboardDateRangeDialog> {
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Wrap(
-                  spacing: 8,
-                  children: [
-                    for (final month in [7, 8, 9])
-                      ActionChip(
-                        label: Text(monthNames[month - 1]),
-                        onPressed: () => _selectMonth(month),
-                      ),
-                  ],
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Wrap(
+                    spacing: 8,
+                    children: [
+                      for (final month in months)
+                        ActionChip(
+                          label: Text(
+                            available.start.year == available.end.year
+                                ? monthNames[month.month - 1]
+                                : '${monthNames[month.month - 1]} ${month.year}',
+                          ),
+                          onPressed: () => _selectMonth(month),
+                        ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 8),

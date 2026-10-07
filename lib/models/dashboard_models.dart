@@ -11,7 +11,19 @@ class DashboardDateRange {
   final DateTime start;
   final DateTime end;
 
-  int get dayCount => end.difference(start).inDays + 1;
+  // Count calendar dates independently of daylight-saving clock changes.
+  int get dayCount =>
+      DateTime.utc(
+        end.year,
+        end.month,
+        end.day,
+      ).difference(DateTime.utc(start.year, start.month, start.day)).inDays +
+      1;
+
+  List<DateTime> get dates => List.generate(
+    dayCount,
+    (index) => DateTime(start.year, start.month, start.day + index),
+  );
 
   bool contains(DateTime date) => !date.isBefore(start) && !date.isAfter(end);
 }
@@ -123,10 +135,7 @@ class DashboardData {
   int get expectedDayCount => range.dayCount;
   int get reportedDayCount => dailyRecords.length;
 
-  List<DateTime> get calendarDates => List.generate(
-    range.dayCount,
-    (index) => range.start.add(Duration(days: index)),
-  );
+  List<DateTime> get calendarDates => range.dates;
 
   List<String> get bedIds => dailyRecords.isEmpty
       ? const []

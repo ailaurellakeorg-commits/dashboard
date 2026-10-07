@@ -11,17 +11,15 @@ abstract interface class DashboardRepository {
   Future<DashboardData> loadDashboard({required DashboardDateRange range});
 }
 
-/// Deterministic facility-level mock data for every day from July through
-/// September 2026. Replace this repository when the reporting API is ready.
+/// Deterministic mock data from July 2026 through today.
+/// Replace this repository when the reporting API is ready.
 class DemoDashboardRepository implements DashboardRepository {
-  DemoDashboardRepository() : _records = _generateRecords();
+  DemoDashboardRepository({DateTime Function()? now})
+    : _now = now ?? DateTime.now;
 
-  static final DashboardDateRange _availableRange = DashboardDateRange(
-    start: DateTime(2026, 7),
-    end: DateTime(2026, 9, 30),
-  );
-
-  final List<DailyDashboardRecord> _records;
+  final DateTime Function() _now;
+  List<DailyDashboardRecord> _records = [];
+  DateTime? _generatedThrough;
 
   static final Set<String> _missingDateKeys = {
     _dateKey(DateTime(2026, 7, 9)),
@@ -31,12 +29,25 @@ class DemoDashboardRepository implements DashboardRepository {
   };
 
   @override
-  DashboardDateRange get availableRange => _availableRange;
+  DashboardDateRange get availableRange {
+    final now = _now();
+    final today = DateTime(now.year, now.month, now.day);
+    final start = DateTime(2026, 7);
+    return DashboardDateRange(
+      start: start,
+      end: today.isBefore(start) ? start : today,
+    );
+  }
 
   @override
   Future<DashboardData> loadDashboard({
     required DashboardDateRange range,
   }) async {
+    final last = availableRange.end;
+    if (_generatedThrough != last) {
+      _records = _generateRecords(last);
+      _generatedThrough = last;
+    }
     final records = _records
         .where((record) => range.contains(record.date))
         .toList();
@@ -46,17 +57,20 @@ class DemoDashboardRepository implements DashboardRepository {
     final recordsByDate = {
       for (final record in records) _dateKey(record.date): record,
     };
-    final selectedDates = List.generate(
-      range.dayCount,
-      (index) => range.start.add(Duration(days: index)),
-    );
+    final selectedDates = range.dates;
     final missingDates = selectedDates
         .where((date) => !recordsByDate.containsKey(_dateKey(date)))
         .toList();
 
-    final previousEnd = range.start.subtract(const Duration(days: 1));
-    final previousStart = previousEnd.subtract(
-      Duration(days: range.dayCount - 1),
+    final previousEnd = DateTime(
+      range.start.year,
+      range.start.month,
+      range.start.day - 1,
+    );
+    final previousStart = DateTime(
+      range.start.year,
+      range.start.month,
+      range.start.day - range.dayCount,
     );
     final previousRecords = _records
         .where(
@@ -165,20 +179,23 @@ class DemoDashboardRepository implements DashboardRepository {
     );
   }
 
-  static List<DailyDashboardRecord> _generateRecords() {
+  static List<DailyDashboardRecord> _generateRecords(DateTime last) {
     final records = <DailyDashboardRecord>[];
     final first = DateTime(2026, 7);
-    final last = DateTime(2026, 9, 30);
     final bedIds = _generateBedIds();
     final employees = _generateEmployees();
 
     for (
       var date = first;
       !date.isAfter(last);
-      date = date.add(const Duration(days: 1))
+      date = DateTime(date.year, date.month, date.day + 1)
     ) {
       if (_missingDateKeys.contains(_dateKey(date))) continue;
-      final index = date.difference(first).inDays;
+      final index = DateTime.utc(
+        date.year,
+        date.month,
+        date.day,
+      ).difference(DateTime.utc(first.year, first.month, first.day)).inDays;
       final weekend = date.weekday >= DateTime.saturday;
       final wave = math.sin(index * .43);
       final secondaryWave = math.cos(index * .19);

@@ -6,7 +6,8 @@ import 'dashboard_event.dart';
 import 'dashboard_state.dart';
 
 class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
-  DashboardBloc({required this.repository}) : super(DashboardInitial()) {
+  DashboardBloc({required this.repository})
+    : super(DashboardInitial(range: _defaultRange(repository))) {
     on<DashboardLoadRequested>(_onLoadRequested);
     on<DashboardRefreshRequested>(_onRefreshRequested);
     on<DashboardDateRangeChanged>(_onDateRangeChanged);
@@ -14,13 +15,21 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
 
   final DashboardRepository repository;
 
+  static DashboardDateRange _defaultRange(DashboardRepository repository) {
+    final available = repository.availableRange;
+    final monthStart = DateTime(available.end.year, available.end.month);
+    return DashboardDateRange(
+      start: monthStart.isBefore(available.start)
+          ? available.start
+          : monthStart,
+      end: available.end,
+    );
+  }
+
   Future<void> _onLoadRequested(
     DashboardLoadRequested event,
     Emitter<DashboardState> emit,
-  ) => _load(
-    range: event.range ?? DashboardDateRange.month(2026, 9),
-    emit: emit,
-  );
+  ) => _load(range: event.range ?? _defaultRange(repository), emit: emit);
 
   Future<void> _onRefreshRequested(
     DashboardRefreshRequested event,

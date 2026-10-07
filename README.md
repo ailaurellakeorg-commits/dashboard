@@ -3,7 +3,9 @@
 A Flutter Web skeleton for a board-level view of census, labor, and expense.
 
 The project exposes a `DashboardRepository` boundary, a `DashboardBloc`, and an
-aggregate-only daily demo dataset covering July through September 2026. A
+synthetic daily demo dataset covering July 2026 through the current date. The
+dashboard opens to the current month to date, and demo records and calendar
+month shortcuts extend automatically as time advances. Future dates are disabled. A
 vertically scrollable calendar supports preset months and custom ranges spanning
 multiple months. Replace `DemoDashboardRepository` with the Microsoft 365/API
 data pipeline once the Phase 1 reporting exports are available.

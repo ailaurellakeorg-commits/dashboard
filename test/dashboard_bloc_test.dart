@@ -6,6 +6,44 @@ import 'package:laurel_lake_dashboard/ui/screens/dashboard/bloc/dashboard_event.
 import 'package:laurel_lake_dashboard/ui/screens/dashboard/bloc/dashboard_state.dart';
 
 void main() {
+  test('defaults to current month and generates October detail data', () async {
+    final repository = DemoDashboardRepository(
+      now: () => DateTime(2026, 10, 7, 15),
+    );
+    final bloc = DashboardBloc(repository: repository);
+    final loaded = bloc.stream.firstWhere((state) => state is DashboardLoaded);
+    bloc.add(const DashboardLoadRequested());
+    final state = await loaded as DashboardLoaded;
+    expect(state.range.start, DateTime(2026, 10));
+    expect(state.range.end, DateTime(2026, 10, 7));
+    expect(state.data.dailyRecords, hasLength(7));
+    expect(state.data.bedIds, hasLength(160));
+    expect(state.data.employees, hasLength(80));
+    expect(state.data.totalLaborCost, greaterThan(0));
+    expect(state.data.totalExpense, greaterThan(0));
+    await bloc.close();
+  });
+
+  test(
+    'available dates and records advance across a year without restarting',
+    () async {
+      var today = DateTime(2026, 12, 31);
+      final repository = DemoDashboardRepository(now: () => today);
+      final december = await repository.loadDashboard(
+        range: DashboardDateRange.month(2026, 12),
+      );
+      expect(december.dailyRecords, hasLength(31));
+      today = DateTime(2027, 1, 2);
+      expect(repository.availableRange.end, today);
+      final data = await repository.loadDashboard(
+        range: DashboardDateRange(start: DateTime(2026, 12, 30), end: today),
+      );
+      expect(data.dailyRecords, hasLength(4));
+      expect(data.dailyRecords.last.date, today);
+      expect(data.missingDates, isEmpty);
+    },
+  );
+
   test('loads daily dashboard data for the requested range', () async {
     final bloc = DashboardBloc(repository: DemoDashboardRepository());
     final range = DashboardDateRange.month(2026, 8);
