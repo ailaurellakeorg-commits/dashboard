@@ -59,3 +59,4 @@ app.*.map.json
 *.keystore
 credentials.json
 service-account*.json
+.vscode/
