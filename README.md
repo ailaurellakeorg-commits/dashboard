@@ -18,6 +18,32 @@ Both use pinned headers and lazy two-dimensional scrolling for large ranges.
 flutter run -d chrome
 ```
 
+## Host on the local network
+
+Build and install the server task once from PowerShell in the project directory:
+
+```powershell
+winget install --id Python.Python.3.13 --exact --scope user
+flutter build web --release
+Set-ExecutionPolicy -Scope Process Bypass
+.\scripts\install_lan_server.ps1
+```
+
+The task uses Python's standard library and starts the static web server when
+your Windows account signs in, independently of VS Code. Other devices on the
+same private network can open `http://<this-machine's-LAN-IP>:8080`. If setup
+reports that Windows Firewall needs administrator permission, run the displayed
+`New-NetFirewallRule` command in an elevated PowerShell once.
+
+To deploy an updated dashboard, rebuild the web bundle:
+
+```powershell
+flutter build web --release
+```
+
+The server will serve the new files immediately; restart the browser page to
+load the updated app. The startup task remains installed across rebuilds.
+
 ## Project structure
 
 - `lib/config` — color and typography theme
