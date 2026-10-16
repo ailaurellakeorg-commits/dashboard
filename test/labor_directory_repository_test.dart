@@ -6,6 +6,38 @@ import 'package:http/testing.dart';
 import 'package:laurel_lake_dashboard/repositories/labor_directory_repository.dart';
 
 void main() {
+  test(
+    'demo directory contains only fictional employees and varied rates',
+    () async {
+      const repository = DemoLaborDirectoryRepository();
+
+      final departments = await repository.loadDepartments();
+      final employees = departments.expand(
+        (department) => department.employees,
+      );
+
+      expect(departments, hasLength(4));
+      expect(employees, hasLength(12));
+      expect(
+        departments.every((department) => department.code.startsWith('DEMO-')),
+        isTrue,
+      );
+      expect(
+        employees.every((employee) => employee.code.startsWith('DEMO-')),
+        isTrue,
+      );
+      expect(
+        employees.any((employee) => employee.rateType == 'hourly'),
+        isTrue,
+      );
+      expect(
+        employees.any((employee) => employee.rateType == 'salary'),
+        isTrue,
+      );
+      expect(employees.any((employee) => employee.rateAmount == null), isFalse);
+    },
+  );
+
   test('loads grouped departments and derives pay subtitles', () async {
     final repository = HttpLaborDirectoryRepository(
       client: MockClient((request) async {

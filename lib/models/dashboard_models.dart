@@ -136,6 +136,93 @@ class LaborEmployee {
   }
 }
 
+enum LaborDisplayMode { demo, live }
+
+class DepartmentLaborDay {
+  const DepartmentLaborDay({
+    required this.laborCost,
+    required this.workedHours,
+    required this.overtimeHours,
+  });
+
+  final double laborCost;
+  final double workedHours;
+  final double overtimeHours;
+}
+
+class EmployeeLaborDay {
+  const EmployeeLaborDay({
+    required this.cost,
+    required this.workedHours,
+    required this.overtimeHours,
+  });
+
+  final double cost;
+  final double workedHours;
+  final double overtimeHours;
+}
+
+class DailyDepartmentLaborRecord {
+  const DailyDepartmentLaborRecord({
+    required this.date,
+    required this.departments,
+    required this.employees,
+  });
+
+  final DateTime date;
+  final Map<String, DepartmentLaborDay> departments;
+  final Map<String, EmployeeLaborDay> employees;
+}
+
+class LaborAnalyticsData {
+  const LaborAnalyticsData({required this.dailyRecords});
+
+  final List<DailyDepartmentLaborRecord> dailyRecords;
+
+  double totalLaborCost(Set<String> departmentCodes) =>
+      _sumFor(departmentCodes, (day) => day.laborCost);
+
+  double totalWorkedHours(Set<String> departmentCodes) =>
+      _sumFor(departmentCodes, (day) => day.workedHours);
+
+  double totalOvertimeHours(Set<String> departmentCodes) =>
+      _sumFor(departmentCodes, (day) => day.overtimeHours);
+
+  List<TrendPoint> totalCostTrend(Set<String> departmentCodes) => [
+    for (final record in dailyRecords)
+      TrendPoint(
+        _dateLabel(record.date),
+        departmentCodes.fold<double>(
+          0,
+          (sum, code) => sum + (record.departments[code]?.laborCost ?? 0),
+        ),
+      ),
+  ];
+
+  List<TrendPoint> departmentCostTrend(String departmentCode) => [
+    for (final record in dailyRecords)
+      TrendPoint(
+        _dateLabel(record.date),
+        record.departments[departmentCode]?.laborCost,
+      ),
+  ];
+
+  double _sumFor(
+    Set<String> departmentCodes,
+    double Function(DepartmentLaborDay) value,
+  ) => dailyRecords.fold<double>(
+    0,
+    (total, record) =>
+        total +
+        departmentCodes.fold<double>(0, (subtotal, code) {
+          final department = record.departments[code];
+          return subtotal + (department == null ? 0 : value(department));
+        }),
+  );
+
+  static String _dateLabel(DateTime date) => '${date.month}/${date.day}';
+}
+
 class Metric {
   const Metric({
     required this.label,

@@ -7,11 +7,12 @@ import '../../utils/date_formatters.dart';
 import 'dashboard/bloc/dashboard_bloc.dart';
 import 'dashboard/bloc/dashboard_event.dart';
 import 'dashboard/bloc/dashboard_state.dart';
+import '../../repositories/labor_analytics_repository.dart';
+import '../../repositories/labor_directory_repository.dart';
 import '../widgets/app_card.dart';
 import '../widgets/dashboard_date_range_picker.dart';
 import '../widgets/detail_matrices.dart';
 import '../widgets/trend_chart.dart';
-import '../../repositories/labor_directory_repository.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -22,6 +23,11 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   var _section = 0;
+  var _laborDisplayMode = LaborDisplayMode.live;
+  final Map<LaborDisplayMode, Set<String>> _selectedDepartmentCodes = {
+    LaborDisplayMode.demo: {},
+    LaborDisplayMode.live: {},
+  };
 
   Future<void> _selectRange(
     BuildContext context,
@@ -74,6 +80,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     onRefresh: () => context.read<DashboardBloc>().add(
                       const DashboardRefreshRequested(),
                     ),
+                    laborDisplayMode: _laborDisplayMode,
+                    onLaborDisplayModeChanged: (mode) => setState(() {
+                      _laborDisplayMode = mode;
+                    }),
+                    selectedDepartmentCodes:
+                        _selectedDepartmentCodes[_laborDisplayMode]!,
+                    onDepartmentSelectionChanged: (departmentCode, selected) {
+                      final selectedCodes =
+                          _selectedDepartmentCodes[_laborDisplayMode]!;
+                      setState(() {
+                        if (selected) {
+                          selectedCodes.add(departmentCode);
+                        } else {
+                          selectedCodes.remove(departmentCode);
+                        }
+                      });
+                    },
                   ),
                 ),
               ],
@@ -255,12 +278,21 @@ class _DashboardContent extends StatelessWidget {
     required this.data,
     required this.onSelectRange,
     required this.onRefresh,
+    required this.laborDisplayMode,
+    required this.onLaborDisplayModeChanged,
+    required this.selectedDepartmentCodes,
+    required this.onDepartmentSelectionChanged,
   });
 
   final int section;
   final DashboardData data;
   final VoidCallback onSelectRange;
   final VoidCallback onRefresh;
+  final LaborDisplayMode laborDisplayMode;
+  final ValueChanged<LaborDisplayMode> onLaborDisplayModeChanged;
+  final Set<String> selectedDepartmentCodes;
+  final void Function(String departmentCode, bool selected)
+  onDepartmentSelectionChanged;
 
   static const _titles = [
     (
@@ -293,6 +325,24 @@ class _DashboardContent extends StatelessWidget {
                   range: data.range,
                   onSelectRange: onSelectRange,
                   onRefresh: onRefresh,
+                  sectionControl: section == 2
+                      ? SegmentedButton<LaborDisplayMode>(
+                          segments: const [
+                            ButtonSegment(
+                              value: LaborDisplayMode.demo,
+                              label: Text('Demo'),
+                            ),
+                            ButtonSegment(
+                              value: LaborDisplayMode.live,
+                              label: Text('Live'),
+                            ),
+                          ],
+                          selected: {laborDisplayMode},
+                          showSelectedIcon: false,
+                          onSelectionChanged: (selection) =>
+                              onLaborDisplayModeChanged(selection.single),
+                        )
+                      : null,
                 ),
                 const SizedBox(height: 28),
                 if (data.missingDates.isNotEmpty) ...[
@@ -301,7 +351,12 @@ class _DashboardContent extends StatelessWidget {
                 ],
                 switch (section) {
                   1 => _CensusTab(data: data),
-                  2 => _LaborTab(data: data),
+                  2 => _LaborTab(
+                    data: data,
+                    displayMode: laborDisplayMode,
+                    selectedDepartmentCodes: selectedDepartmentCodes,
+                    onDepartmentSelectionChanged: onDepartmentSelectionChanged,
+                  ),
                   3 => _ExpenseTab(data: data),
                   _ => _OverviewTab(data: data),
                 },
@@ -323,6 +378,7 @@ class _Header extends StatelessWidget {
     required this.range,
     required this.onSelectRange,
     required this.onRefresh,
+    this.sectionControl,
   });
 
   final String title;
@@ -330,48 +386,74 @@ class _Header extends StatelessWidget {
   final DashboardDateRange range;
   final VoidCallback onSelectRange;
   final VoidCallback onRefresh;
+  final Widget? sectionControl;
 
   @override
-  Widget build(BuildContext context) => Wrap(
-    alignment: WrapAlignment.spaceBetween,
-    crossAxisAlignment: WrapCrossAlignment.center,
-    runSpacing: 16,
-    spacing: 20,
-    children: [
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.headlineLarge),
-          const SizedBox(height: 6),
-          Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
-        ],
+  Widget build(BuildContext context) {
+    final heading = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: Theme.of(context).textTheme.headlineLarge),
+        const SizedBox(height: 6),
+        Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
+      ],
+    );
+    final refreshButton = IconButton(
+      tooltip: 'Refresh dashboard',
+      onPressed: onRefresh,
+      icon: const Icon(Icons.refresh),
+    );
+    final dateRangeButton = OutlinedButton.icon(
+      onPressed: onSelectRange,
+      icon: const Icon(Icons.calendar_month_outlined, size: 19),
+      label: Text(formatDateRange(range.start, range.end)),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppTheme.ink,
+        backgroundColor: Colors.white,
+        side: const BorderSide(color: AppTheme.line),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
-      Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            tooltip: 'Refresh dashboard',
-            onPressed: onRefresh,
-            icon: const Icon(Icons.refresh),
-          ),
-          OutlinedButton.icon(
-            onPressed: onSelectRange,
-            icon: const Icon(Icons.calendar_month_outlined, size: 19),
-            label: Text(formatDateRange(range.start, range.end)),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppTheme.ink,
-              backgroundColor: Colors.white,
-              side: const BorderSide(color: AppTheme.line),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 900) {
+          return Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            runSpacing: 16,
+            spacing: 20,
+            children: [
+              heading,
+              Wrap(
+                alignment: WrapAlignment.end,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [refreshButton, dateRangeButton, ?sectionControl],
               ),
-            ),
-          ),
-        ],
-      ),
-    ],
-  );
+            ],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(child: heading),
+            refreshButton,
+            const SizedBox(width: 8),
+            dateRangeButton,
+            if (sectionControl != null) ...[
+              const SizedBox(width: 12),
+              const Expanded(child: SizedBox.shrink()),
+              sectionControl!,
+            ],
+          ],
+        );
+      },
+    );
+  }
 }
 
 class _MissingDataBanner extends StatelessWidget {
@@ -480,9 +562,18 @@ class _CensusTab extends StatelessWidget {
 }
 
 class _LaborTab extends StatefulWidget {
-  const _LaborTab({required this.data});
+  const _LaborTab({
+    required this.data,
+    required this.displayMode,
+    required this.selectedDepartmentCodes,
+    required this.onDepartmentSelectionChanged,
+  });
 
   final DashboardData data;
+  final LaborDisplayMode displayMode;
+  final Set<String> selectedDepartmentCodes;
+  final void Function(String departmentCode, bool selected)
+  onDepartmentSelectionChanged;
 
   @override
   State<_LaborTab> createState() => _LaborTabState();
@@ -490,7 +581,10 @@ class _LaborTab extends StatefulWidget {
 
 class _LaborTabState extends State<_LaborTab> {
   late Future<List<LaborDepartment>> _departments;
-  final Set<String> _selectedDepartmentCodes = {};
+  Future<LaborAnalyticsData>? _demoAnalytics;
+  String? _demoAnalyticsKey;
+  var _demoSelectionInitialized = false;
+  var _demoSelectionScheduled = false;
 
   @override
   void initState() {
@@ -499,8 +593,69 @@ class _LaborTabState extends State<_LaborTab> {
   }
 
   void _loadDepartments() {
-    _departments = context.read<LaborDirectoryRepository>().loadDepartments();
+    final repository = widget.displayMode == LaborDisplayMode.demo
+        ? context.read<DemoLaborDirectoryRepository>()
+        : context.read<LaborDirectoryRepository>();
+    _departments = repository.loadDepartments();
   }
+
+  @override
+  void didUpdateWidget(covariant _LaborTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.displayMode != widget.displayMode) {
+      _loadDepartments();
+      _demoAnalytics = null;
+      _demoAnalyticsKey = null;
+    }
+  }
+
+  Future<LaborAnalyticsData> _loadDemoAnalytics(
+    List<LaborDepartment> departments,
+  ) {
+    final range = widget.data.range;
+    final key =
+        '${range.start}:${range.end}:'
+        '${departments.map((department) => department.code).join(',')}';
+    if (_demoAnalytics == null || _demoAnalyticsKey != key) {
+      _demoAnalyticsKey = key;
+      _demoAnalytics = context.read<LaborAnalyticsRepository>().load(
+        range: range,
+        departments: departments,
+      );
+    }
+    return _demoAnalytics!;
+  }
+
+  Widget _buildLaborContent(
+    List<LaborDepartment> departments,
+    LaborAnalyticsData? analytics,
+  ) => Column(
+    children: [
+      _LaborMetricsPanel(analytics: analytics, departments: departments),
+      const SizedBox(height: 20),
+      _LaborChartPanel(
+        mode: widget.displayMode,
+        analytics: analytics,
+        departments: departments,
+        selectedDepartmentCodes: widget.selectedDepartmentCodes,
+        onToggleAll: () {
+          final selectAll =
+              widget.selectedDepartmentCodes.length != departments.length;
+          for (final department in departments) {
+            widget.onDepartmentSelectionChanged(department.code, selectAll);
+          }
+        },
+      ),
+      const SizedBox(height: 20),
+      EmployeeLaborMatrix(
+        data: widget.data,
+        departments: departments,
+        analytics: analytics,
+        selectedDepartmentCodes: widget.selectedDepartmentCodes,
+        onDepartmentSelectionChanged: widget.onDepartmentSelectionChanged,
+      ),
+    ],
+  );
 
   @override
   Widget build(BuildContext context) => FutureBuilder<List<LaborDepartment>>(
@@ -532,80 +687,133 @@ class _LaborTabState extends State<_LaborTab> {
       }
 
       final departments = snapshot.data ?? const <LaborDepartment>[];
-      return Column(
-        children: [
-          const _LaborMetricsUnavailable(),
-          const SizedBox(height: 20),
-          _LaborChartUnavailable(
-            departments: departments,
-            selectedDepartmentCodes: _selectedDepartmentCodes,
-            onToggleAll: () => setState(() {
-              if (_selectedDepartmentCodes.length == departments.length) {
-                _selectedDepartmentCodes.clear();
-              } else {
-                _selectedDepartmentCodes
-                  ..clear()
-                  ..addAll(departments.map((department) => department.code));
-              }
-            }),
-          ),
-          const SizedBox(height: 20),
-          EmployeeLaborMatrix(
-            data: widget.data,
-            departments: departments,
-            selectedDepartmentCodes: _selectedDepartmentCodes,
-            onDepartmentSelectionChanged: (departmentCode, selected) {
-              setState(() {
-                if (selected) {
-                  _selectedDepartmentCodes.add(departmentCode);
-                } else {
-                  _selectedDepartmentCodes.remove(departmentCode);
-                }
-              });
-            },
-          ),
-        ],
+      if (widget.displayMode == LaborDisplayMode.demo &&
+          !_demoSelectionInitialized &&
+          !_demoSelectionScheduled) {
+        _demoSelectionScheduled = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _demoSelectionScheduled = false;
+          if (!mounted || widget.displayMode != LaborDisplayMode.demo) return;
+          _demoSelectionInitialized = true;
+          for (final department in departments) {
+            if (!widget.selectedDepartmentCodes.contains(department.code)) {
+              widget.onDepartmentSelectionChanged(department.code, true);
+            }
+          }
+        });
+      }
+      if (widget.displayMode == LaborDisplayMode.live) {
+        return _buildLaborContent(departments, null);
+      }
+
+      return FutureBuilder<LaborAnalyticsData>(
+        future: _loadDemoAnalytics(departments),
+        builder: (context, analyticsSnapshot) {
+          if (analyticsSnapshot.connectionState == ConnectionState.waiting) {
+            return const AppCard(
+              child: SizedBox(
+                height: 120,
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            );
+          }
+          if (analyticsSnapshot.hasError) {
+            return AppCard(
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text('Could not load demo labor data.'),
+                  ),
+                  IconButton(
+                    tooltip: 'Retry loading demo labor data',
+                    onPressed: () => setState(() {
+                      _demoAnalytics = null;
+                      _demoAnalyticsKey = null;
+                    }),
+                    icon: const Icon(Icons.refresh),
+                  ),
+                ],
+              ),
+            );
+          }
+          return _buildLaborContent(departments, analyticsSnapshot.data);
+        },
       );
     },
   );
 }
 
-class _LaborMetricsUnavailable extends StatelessWidget {
-  const _LaborMetricsUnavailable();
+class _LaborMetricsPanel extends StatelessWidget {
+  const _LaborMetricsPanel({
+    required this.analytics,
+    required this.departments,
+  });
+
+  final LaborAnalyticsData? analytics;
+  final List<LaborDepartment> departments;
 
   @override
-  Widget build(BuildContext context) => AppCard(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Labor metrics unavailable',
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'No dated timekeeping or payroll amounts are available. '
-          'Labor hours, overtime, and costs are not calculated.',
-        ),
-        const SizedBox(height: 14),
-        const Wrap(
-          spacing: 28,
-          runSpacing: 12,
-          children: [
-            _UnavailableMetric(label: 'Labor cost'),
-            _UnavailableMetric(label: 'Worked hours'),
-            _UnavailableMetric(label: 'Overtime hours'),
-          ],
-        ),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final allDepartmentCodes = departments
+        .map((department) => department.code)
+        .toSet();
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            analytics == null
+                ? 'Live labor metrics unavailable'
+                : 'Demo labor metrics',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            analytics == null
+                ? 'No dated timekeeping or payroll amounts are available.'
+                : 'Synthetic values for demonstration · '
+                      '${departments.length} departments · selection only changes chart lines',
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 28,
+            runSpacing: 12,
+            children: [
+              _UnavailableMetric(
+                label: 'Labor cost',
+                value: analytics == null
+                    ? '—'
+                    : formatCurrency(
+                        analytics?.totalLaborCost(allDepartmentCodes) ?? 0,
+                      ),
+              ),
+              _UnavailableMetric(
+                label: 'Worked hours',
+                value: analytics == null
+                    ? '—'
+                    : (analytics?.totalWorkedHours(allDepartmentCodes) ?? 0)
+                          .toStringAsFixed(0),
+              ),
+              _UnavailableMetric(
+                label: 'Overtime hours',
+                value: analytics == null
+                    ? '—'
+                    : (analytics?.totalOvertimeHours(allDepartmentCodes) ?? 0)
+                          .toStringAsFixed(0),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _UnavailableMetric extends StatelessWidget {
-  const _UnavailableMetric({required this.label});
+  const _UnavailableMetric({required this.label, required this.value});
 
   final String label;
+  final String value;
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -615,25 +823,36 @@ class _UnavailableMetric extends StatelessWidget {
       children: [
         Text(label, style: Theme.of(context).textTheme.labelLarge),
         const SizedBox(height: 4),
-        const Text('—', style: TextStyle(fontSize: 24, color: AppTheme.muted)),
+        Text(
+          value,
+          key: ValueKey('labor-metric-value-$label'),
+          style: const TextStyle(fontSize: 24, color: AppTheme.ink),
+        ),
       ],
     ),
   );
 }
 
-class _LaborChartUnavailable extends StatelessWidget {
-  const _LaborChartUnavailable({
+class _LaborChartPanel extends StatelessWidget {
+  const _LaborChartPanel({
+    required this.mode,
+    required this.analytics,
     required this.departments,
     required this.selectedDepartmentCodes,
     required this.onToggleAll,
   });
 
+  final LaborDisplayMode mode;
+  final LaborAnalyticsData? analytics;
   final List<LaborDepartment> departments;
   final Set<String> selectedDepartmentCodes;
   final VoidCallback onToggleAll;
 
   @override
   Widget build(BuildContext context) {
+    final allDepartmentCodes = departments
+        .map((department) => department.code)
+        .toSet();
     final selected = departments
         .where(
           (department) => selectedDepartmentCodes.contains(department.code),
@@ -680,13 +899,38 @@ class _LaborChartUnavailable extends StatelessWidget {
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(color: AppTheme.line),
               ),
-              child: const Center(
-                child: Text(
-                  'Dated labor costs are unavailable; no lines can be plotted.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: AppTheme.muted),
-                ),
-              ),
+              child: analytics == null
+                  ? const Center(
+                      child: Text(
+                        'Dated live labor costs are unavailable.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: AppTheme.muted),
+                      ),
+                    )
+                  : MultiTrendChart(
+                      series: [
+                        TrendSeries(
+                          label: 'Total',
+                          points:
+                              analytics?.totalCostTrend(allDepartmentCodes) ??
+                              const [],
+                          color: AppTheme.orange,
+                        ),
+                        for (final department in selected)
+                          TrendSeries(
+                            label: department.name,
+                            points:
+                                analytics?.departmentCostTrend(
+                                  department.code,
+                                ) ??
+                                const [],
+                            color: _departmentColor(
+                              departments.indexOf(department),
+                            ),
+                          ),
+                      ],
+                      axisFormat: TrendAxisFormat.currency,
+                    ),
             ),
           ),
           Row(

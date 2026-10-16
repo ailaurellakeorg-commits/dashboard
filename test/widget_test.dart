@@ -4,6 +4,7 @@ import 'package:laurel_lake_dashboard/main.dart';
 import 'package:laurel_lake_dashboard/models/dashboard_models.dart';
 import 'package:laurel_lake_dashboard/repositories/dashboard_repository.dart';
 import 'package:laurel_lake_dashboard/repositories/labor_directory_repository.dart';
+import 'package:laurel_lake_dashboard/ui/widgets/trend_chart.dart';
 import 'package:scrollable_clean_calendar/scrollable_clean_calendar.dart';
 
 void main() {
@@ -29,10 +30,10 @@ void main() {
 
     await tester.tap(find.text('Labor'));
     await tester.pumpAndSettle();
-    expect(find.text('Labor metrics unavailable'), findsOneWidget);
+    expect(find.text('Live labor metrics unavailable'), findsOneWidget);
     expect(find.text('Daily labor cost'), findsOneWidget);
     expect(
-      find.text('Dated labor costs are unavailable; no lines can be plotted.'),
+      find.text('Dated live labor costs are unavailable.'),
       findsOneWidget,
     );
     expect(find.text('Employee labor detail'), findsOneWidget);
@@ -62,6 +63,87 @@ void main() {
     expect(find.text('Hourly · \$30/hr'), findsOneWidget);
     expect(find.text('Taylor Carter'), findsOneWidget);
     expect(find.text('Salary · \$40'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Demo'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Demo'));
+    await tester.pumpAndSettle();
+    expect(find.text('Demo labor metrics'), findsOneWidget);
+    expect(find.byType(MultiTrendChart), findsOneWidget);
+    expect(find.text('Resident Care'), findsNWidgets(2));
+    expect(find.text('Anthony Spehar'), findsNothing);
+    expect(find.text('Robin Silva'), findsNothing);
+    await tester.ensureVisible(find.byKey(showAllKey));
+    expect(tester.widget<Checkbox>(find.byKey(showAllKey)).value, isTrue);
+    final demoDepartmentCheckbox = const ValueKey(
+      'department-toggle-DEMO-CARE',
+    );
+    final demoChart = tester.widget<MultiTrendChart>(
+      find.byType(MultiTrendChart),
+    );
+    final totalValuesBefore = demoChart.series.first.points
+        .map((point) => point.value)
+        .toList();
+    final laborCostBefore = tester
+        .widget<Text>(
+          find.byKey(const ValueKey('labor-metric-value-Labor cost')),
+        )
+        .data;
+    expect(demoChart.series, hasLength(5));
+    await tester.ensureVisible(find.byKey(demoDepartmentCheckbox));
+    expect(
+      tester.widget<Checkbox>(find.byKey(demoDepartmentCheckbox)).value,
+      isTrue,
+    );
+    await tester.tap(find.byKey(demoDepartmentCheckbox));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Checkbox>(find.byKey(showAllKey)).value, isNull);
+    final chartAfterHidingDepartment = tester.widget<MultiTrendChart>(
+      find.byType(MultiTrendChart),
+    );
+    expect(chartAfterHidingDepartment.series, hasLength(4));
+    expect(
+      chartAfterHidingDepartment.series.first.points
+          .map((point) => point.value)
+          .toList(),
+      equals(totalValuesBefore),
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('labor-metric-value-Labor cost')),
+          )
+          .data,
+      laborCostBefore,
+    );
+    expect(find.text('Resident Care'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(demoDepartmentCheckbox));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(demoDepartmentCheckbox));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Checkbox>(find.byKey(showAllKey)).value, isTrue);
+    expect(find.text('Resident Care'), findsNWidgets(2));
+    final demoDepartmentExpander = const ValueKey(
+      'expand-department-DEMO-CARE',
+    );
+    await tester.ensureVisible(find.byKey(demoDepartmentExpander));
+    expect(find.text('15.3h'), findsWidgets);
+    expect(find.text('\$522'), findsWidgets);
+    await tester.tap(find.byKey(demoDepartmentExpander));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Robin Silva'));
+    await tester.pumpAndSettle();
+    expect(find.text('Robin Silva'), findsOneWidget);
+    expect(find.text('Hourly · \$36.50/hr'), findsOneWidget);
+    await tester.ensureVisible(find.text('Live'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Live'));
+    await tester.pumpAndSettle();
+    expect(find.text('Live labor metrics unavailable'), findsOneWidget);
+    expect(
+      find.text('Dated live labor costs are unavailable.'),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 

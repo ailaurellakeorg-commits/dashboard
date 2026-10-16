@@ -84,12 +84,14 @@ class EmployeeLaborMatrix extends StatefulWidget {
     super.key,
     required this.data,
     required this.departments,
+    required this.analytics,
     required this.selectedDepartmentCodes,
     required this.onDepartmentSelectionChanged,
   });
 
   final DashboardData data;
   final List<LaborDepartment> departments;
+  final LaborAnalyticsData? analytics;
   final Set<String> selectedDepartmentCodes;
   final void Function(String departmentCode, bool selected)
   onDepartmentSelectionChanged;
@@ -104,8 +106,11 @@ class _EmployeeLaborMatrixState extends State<EmployeeLaborMatrix> {
   @override
   Widget build(BuildContext context) {
     final data = widget.data;
-    final recordsByDate = {
-      for (final record in data.dailyRecords) _dateKey(record.date): record,
+    final analyticsByDate = {
+      for (final record
+          in widget.analytics?.dailyRecords ??
+              const <DailyDepartmentLaborRecord>[])
+        _dateKey(record.date): record,
     };
     final dates = data.calendarDates.reversed.toList();
     final visibleRows = <_LaborMatrixRow>[];
@@ -129,16 +134,17 @@ class _EmployeeLaborMatrixState extends State<EmployeeLaborMatrix> {
           'labor-${data.range.start.toIso8601String()}-${data.range.end.toIso8601String()}',
       title: 'Employee labor detail',
       description:
-          '$employeeCount employees across ${widget.departments.length} departments · employee-day costs are not loaded',
+          '$employeeCount employees across ${widget.departments.length} departments · '
+          '${widget.analytics == null ? 'live employee-day costs unavailable' : 'synthetic demo hours and costs'}',
       rowCount: visibleRows.length,
       columnCount: dates.length,
       leadingColumnWidth: 250,
       dataColumnWidth: 120,
       headerHeight: 72,
-      rowHeight: 54,
+      rowHeight: 64,
       cornerBuilder: (_) => const MatrixHeaderCell(
         title: 'DEPARTMENT / EMPLOYEE',
-        detail: 'Employee daily costs unavailable',
+        detail: 'Rates and daily totals',
         leading: true,
       ),
       rowHeaderBuilder: (context, row) {
@@ -169,6 +175,7 @@ class _EmployeeLaborMatrixState extends State<EmployeeLaborMatrix> {
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
             IconButton(
+              key: ValueKey('expand-department-${department.code}'),
               tooltip: expanded ? 'Collapse department' : 'Expand department',
               onPressed: () => setState(() {
                 if (expanded) {
@@ -198,16 +205,55 @@ class _EmployeeLaborMatrixState extends State<EmployeeLaborMatrix> {
       },
       columnHeaderBuilder: (context, column) {
         final date = dates[column];
-        final record = recordsByDate[_dateKey(date)];
+        final record = analyticsByDate[_dateKey(date)];
+        if (widget.analytics == null || record == null) {
+          return MatrixHeaderCell(
+            title: formatShortDate(date),
+            detail: 'Live data\nunavailable',
+          );
+        }
+        final allDepartmentValues = record.departments.values;
+        final laborCost = allDepartmentValues.fold<double>(
+          0,
+          (total, value) => total + value.laborCost,
+        );
+        final laborHours = allDepartmentValues.fold<double>(
+          0,
+          (total, value) => total + value.workedHours,
+        );
         return MatrixHeaderCell(
           title: formatShortDate(date),
-          detail: record == null
-              ? 'No data\nreported'
-              : '${record.laborHours.toStringAsFixed(1)}h\n${formatCurrency(record.laborCost)}',
-          missing: record == null,
+          detail:
+              '${laborHours.toStringAsFixed(1)}h\n${formatCurrency(laborCost)}',
         );
       },
-      cellBuilder: (context, row, column) => const SizedBox.shrink(),
+      cellBuilder: (context, row, column) {
+        final matrixRow = visibleRows[row];
+        final dailyRecord = analyticsByDate[_dateKey(dates[column])];
+        if (matrixRow.employee == null) {
+          final departmentDay =
+              dailyRecord?.departments[matrixRow.department.code];
+          if (departmentDay == null) return const SizedBox.shrink();
+          if (departmentDay.workedHours == 0) {
+            return const MatrixValueCell(primary: '—');
+          }
+          return MatrixValueCell(
+            primary: '${departmentDay.workedHours.toStringAsFixed(1)}h',
+            secondary: formatCurrency(departmentDay.laborCost),
+          );
+        }
+
+        final employeeDay = dailyRecord?.employees[matrixRow.employee!.code];
+        if (employeeDay == null) return const SizedBox.shrink();
+        if (employeeDay.workedHours == 0) {
+          return const MatrixValueCell(primary: '—');
+        }
+        return MatrixValueCell(
+          primary: '${employeeDay.workedHours.toStringAsFixed(1)}h',
+          secondary: formatCurrency(employeeDay.cost),
+          emphasized: employeeDay.overtimeHours > 0,
+        );
+      },
     );
   }
 }

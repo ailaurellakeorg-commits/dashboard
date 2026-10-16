@@ -55,6 +55,161 @@ class TrendChart extends StatelessWidget {
   }
 }
 
+class TrendSeries {
+  const TrendSeries({
+    required this.label,
+    required this.points,
+    required this.color,
+  });
+
+  final String label;
+  final List<TrendPoint> points;
+  final Color color;
+}
+
+class MultiTrendChart extends StatelessWidget {
+  const MultiTrendChart({
+    super.key,
+    required this.series,
+    required this.axisFormat,
+  });
+
+  final List<TrendSeries> series;
+  final TrendAxisFormat axisFormat;
+
+  @override
+  Widget build(BuildContext context) {
+    final points = series.isEmpty ? const <TrendPoint>[] : series.first.points;
+    final labelCount = points.length < 7 ? points.length : 7;
+    final labels = labelCount == 0
+        ? const <TrendPoint>[]
+        : labelCount == 1
+        ? [points.first]
+        : List.generate(
+            labelCount,
+            (index) =>
+                points[((points.length - 1) * index / (labelCount - 1))
+                    .round()],
+          );
+
+    return SizedBox(
+      height: 180,
+      child: CustomPaint(
+        painter: _MultiTrendPainter(series: series, axisFormat: axisFormat),
+        child: Padding(
+          padding: const EdgeInsets.only(top: 152, left: 52),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              for (final point in labels)
+                Text(
+                  point.label,
+                  style: Theme.of(context).textTheme.labelMedium
+                      ?.copyWith(color: AppTheme.muted),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MultiTrendPainter extends CustomPainter {
+  const _MultiTrendPainter({required this.series, required this.axisFormat});
+
+  final List<TrendSeries> series;
+  final TrendAxisFormat axisFormat;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const chartHeight = 132.0;
+    const plotLeft = 52.0;
+    const plotRight = 4.0;
+    final values = series
+        .expand((item) => item.points)
+        .map((point) => point.value)
+        .whereType<double>()
+        .toList();
+    if (values.isEmpty) return;
+
+    final minimum = values.reduce((a, b) => a < b ? a : b);
+    final maximum = values.reduce((a, b) => a > b ? a : b);
+    final rawRange = (maximum - minimum)
+        .abs()
+        .clamp(1, double.infinity)
+        .toDouble();
+    final axisMinimum = minimum - rawRange * .08;
+    final axisMaximum = maximum + rawRange * .08;
+    final range = axisMaximum - axisMinimum;
+    final plotWidth = size.width - plotLeft - plotRight;
+    final grid = Paint()..color = AppTheme.line;
+    for (var index = 0; index < 4; index++) {
+      final y = chartHeight * index / 3;
+      canvas.drawLine(Offset(plotLeft, y), Offset(size.width, y), grid);
+      final tickValue = axisMaximum - range * index / 3;
+      final label = TextPainter(
+        text: TextSpan(
+          text: _formatAxisValue(tickValue, axisFormat),
+          style: const TextStyle(
+            color: AppTheme.muted,
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+        textAlign: TextAlign.right,
+      )..layout(maxWidth: plotLeft - 8);
+      label.paint(
+        canvas,
+        Offset(
+          plotLeft - label.width - 8,
+          (y - label.height / 2).clamp(0, chartHeight - label.height),
+        ),
+      );
+    }
+
+    for (final item in series) {
+      if (item.points.isEmpty) continue;
+      final step = item.points.length == 1
+          ? 0.0
+          : plotWidth / (item.points.length - 1);
+      final path = Path();
+      var segmentStarted = false;
+      for (var index = 0; index < item.points.length; index++) {
+        final value = item.points[index].value;
+        if (value == null) {
+          segmentStarted = false;
+          continue;
+        }
+        final x = item.points.length == 1
+            ? plotLeft + plotWidth / 2
+            : plotLeft + index * step;
+        final y = chartHeight - (value - axisMinimum) / range * chartHeight;
+        if (!segmentStarted) {
+          path.moveTo(x, y);
+          segmentStarted = true;
+        } else {
+          path.lineTo(x, y);
+        }
+        canvas.drawCircle(Offset(x, y), 4.5, Paint()..color = Colors.white);
+        canvas.drawCircle(Offset(x, y), 3, Paint()..color = item.color);
+      }
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = item.color
+          ..strokeWidth = 2.5
+          ..style = PaintingStyle.stroke,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_MultiTrendPainter oldDelegate) =>
+      oldDelegate.series != series || oldDelegate.axisFormat != axisFormat;
+}
+
 class _TrendPainter extends CustomPainter {
   const _TrendPainter({
     required this.points,
