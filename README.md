@@ -20,6 +20,13 @@ Both use pinned headers and lazy two-dimensional scrolling for large ranges.
 flutter run -d chrome
 ```
 
+For the Labor directory in Flutter debug mode, the Python server must also be
+running. Point the debug app at it with:
+
+```powershell
+flutter run -d chrome --dart-define=LABOR_API_BASE_URL=http://localhost:8080
+```
+
 ## Host on the local network
 
 Build and install the server task once from PowerShell in the project directory:
@@ -45,6 +52,21 @@ flutter build web --release
 
 The server will serve the new files immediately; restart the browser page to
 load the updated app. The startup task remains installed across rebuilds.
+
+## Labor directory data
+
+The Python server reads `DeptMaster.csv` and `Employees.csv` from `DATA_DIR` in
+the project-root `.env` file. Copy `.env.example` to `.env` and change the path
+if needed; without a setting, the server uses `C:\DATA`. The setting is read
+when the Labor directory is requested. The CSVs stay local and are not part of
+the repository.
+
+Employee pay subtitles use `Location_Code` as the amount, as configured for
+this dashboard: `HOURLY` is shown per hour, and `SALARY`/`SALN80` as salary.
+Employee-by-day cells remain blank until daily employee costs are available;
+aggregate daily labor figures remain unchanged. The directory endpoint serves
+employee names and these interpreted amounts to clients that can access the
+server, so keep it on a trusted local network.
 
 ## Project structure
 

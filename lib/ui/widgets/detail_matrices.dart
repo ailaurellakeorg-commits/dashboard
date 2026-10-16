@@ -79,52 +79,121 @@ class BedOccupancyMatrix extends StatelessWidget {
   }
 }
 
-class EmployeeLaborMatrix extends StatelessWidget {
-  const EmployeeLaborMatrix({super.key, required this.data});
+class EmployeeLaborMatrix extends StatefulWidget {
+  const EmployeeLaborMatrix({
+    super.key,
+    required this.data,
+    required this.departments,
+    required this.selectedDepartmentCodes,
+    required this.onDepartmentSelectionChanged,
+  });
 
   final DashboardData data;
+  final List<LaborDepartment> departments;
+  final Set<String> selectedDepartmentCodes;
+  final void Function(String departmentCode, bool selected)
+  onDepartmentSelectionChanged;
+
+  @override
+  State<EmployeeLaborMatrix> createState() => _EmployeeLaborMatrixState();
+}
+
+class _EmployeeLaborMatrixState extends State<EmployeeLaborMatrix> {
+  final Set<String> _expandedDepartments = {};
 
   @override
   Widget build(BuildContext context) {
+    final data = widget.data;
     final recordsByDate = {
       for (final record in data.dailyRecords) _dateKey(record.date): record,
     };
     final dates = data.calendarDates.reversed.toList();
-    final employees = data.employees;
+    final visibleRows = <_LaborMatrixRow>[];
+    for (final department in widget.departments) {
+      visibleRows.add(_LaborMatrixRow.department(department));
+      if (_expandedDepartments.contains(department.code)) {
+        visibleRows.addAll(
+          department.employees.map(
+            (employee) => _LaborMatrixRow.employee(department, employee),
+          ),
+        );
+      }
+    }
+    final employeeCount = widget.departments.fold<int>(
+      0,
+      (count, department) => count + department.employees.length,
+    );
+
     return DetailMatrix(
       matrixId:
           'labor-${data.range.start.toIso8601String()}-${data.range.end.toIso8601String()}',
       title: 'Employee labor detail',
       description:
-          '${employees.length} employees · each cell shows worked hours and labor cost',
-      rowCount: employees.length,
+          '$employeeCount employees across ${widget.departments.length} departments · employee-day costs are not loaded',
+      rowCount: visibleRows.length,
       columnCount: dates.length,
-      leadingColumnWidth: 220,
+      leadingColumnWidth: 250,
       dataColumnWidth: 120,
       headerHeight: 72,
       rowHeight: 54,
       cornerBuilder: (_) => const MatrixHeaderCell(
-        title: 'EMPLOYEE',
-        detail: 'Selected-period total',
+        title: 'DEPARTMENT / EMPLOYEE',
+        detail: 'Employee daily costs unavailable',
         leading: true,
       ),
       rowHeaderBuilder: (context, row) {
-        final employee = employees[row];
-        final hours = data.dailyRecords.fold<double>(
-          0,
-          (sum, record) =>
-              sum + (record.employeeLabor[employee.employeeId]?.hours ?? 0),
-        );
-        final cost = data.dailyRecords.fold<double>(
-          0,
-          (sum, record) =>
-              sum + (record.employeeLabor[employee.employeeId]?.cost ?? 0),
-        );
-        return MatrixHeaderCell(
-          title: employee.employeeName,
-          detail:
-              '${employee.employeeId} · ${employee.role}\n${hours.toStringAsFixed(1)}h · ${formatCurrency(cost)}',
-          leading: true,
+        final item = visibleRows[row];
+        if (item.employee case final employee?) {
+          return Padding(
+            padding: const EdgeInsets.only(left: 24),
+            child: MatrixHeaderCell(
+              title: employee.name,
+              detail: employee.rateSubtitle,
+              leading: true,
+            ),
+          );
+        }
+
+        final department = item.department;
+        final expanded = _expandedDepartments.contains(department.code);
+        return Row(
+          children: [
+            Checkbox(
+              key: ValueKey('department-toggle-${department.code}'),
+              value: widget.selectedDepartmentCodes.contains(department.code),
+              onChanged: (selected) => widget.onDepartmentSelectionChanged(
+                department.code,
+                selected ?? false,
+              ),
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            IconButton(
+              tooltip: expanded ? 'Collapse department' : 'Expand department',
+              onPressed: () => setState(() {
+                if (expanded) {
+                  _expandedDepartments.remove(department.code);
+                } else {
+                  _expandedDepartments.add(department.code);
+                }
+              }),
+              icon: Icon(
+                expanded ? Icons.expand_more : Icons.chevron_right,
+                size: 18,
+                color: AppTheme.muted,
+              ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 32, height: 42),
+            ),
+            Expanded(
+              child: MatrixHeaderCell(
+                title: department.name,
+                detail:
+                    '${department.employees.length} employees · ${department.code}',
+                leading: true,
+              ),
+            ),
+          ],
         );
       },
       columnHeaderBuilder: (context, column) {
@@ -138,23 +207,18 @@ class EmployeeLaborMatrix extends StatelessWidget {
           missing: record == null,
         );
       },
-      cellBuilder: (context, row, column) {
-        final employee = employees[row];
-        final record = recordsByDate[_dateKey(dates[column])];
-        if (record == null) {
-          return const MatrixValueCell(primary: 'N/A', missing: true);
-        }
-        final detail = record.employeeLabor[employee.employeeId]!;
-        return MatrixValueCell(
-          primary: detail.hours == 0
-              ? '—'
-              : '${detail.hours.toStringAsFixed(1)}h',
-          secondary: detail.hours == 0 ? null : formatCurrency(detail.cost),
-          emphasized: detail.hours >= 9.5,
-        );
-      },
+      cellBuilder: (context, row, column) => const SizedBox.shrink(),
     );
   }
+}
+
+class _LaborMatrixRow {
+  const _LaborMatrixRow.department(this.department) : employee = null;
+
+  const _LaborMatrixRow.employee(this.department, this.employee);
+
+  final LaborDepartment department;
+  final LaborEmployee? employee;
 }
 
 typedef MatrixIndexedBuilder = Widget Function(BuildContext context, int index);

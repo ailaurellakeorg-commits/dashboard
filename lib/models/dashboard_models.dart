@@ -75,6 +75,67 @@ class EmployeeLaborDetail {
   final double cost;
 }
 
+class LaborDepartment {
+  const LaborDepartment({
+    required this.code,
+    required this.name,
+    required this.employees,
+  });
+
+  factory LaborDepartment.fromJson(Map<String, dynamic> json) =>
+      LaborDepartment(
+        code: json['code'] as String,
+        name: json['name'] as String,
+        employees: (json['employees'] as List<dynamic>)
+            .map(
+              (employee) =>
+                  LaborEmployee.fromJson(employee as Map<String, dynamic>),
+            )
+            .toList(),
+      );
+
+  final String code;
+  final String name;
+  final List<LaborEmployee> employees;
+}
+
+class LaborEmployee {
+  const LaborEmployee({
+    required this.code,
+    required this.name,
+    required this.rateType,
+    required this.rateAmount,
+  });
+
+  factory LaborEmployee.fromJson(Map<String, dynamic> json) {
+    final amount = json['rateAmount'];
+    return LaborEmployee(
+      code: json['code'] as String,
+      name: json['name'] as String,
+      rateType: json['rateType'] as String?,
+      rateAmount: amount is num ? amount.toDouble() : null,
+    );
+  }
+
+  final String code;
+  final String name;
+  final String? rateType;
+  final double? rateAmount;
+
+  String get rateSubtitle {
+    final amount = rateAmount;
+    final type = rateType;
+    if (amount == null || type == null) return 'Rate unavailable';
+
+    final amountText = amount == amount.truncateToDouble()
+        ? amount.toStringAsFixed(0)
+        : amount.toStringAsFixed(2);
+    return type == 'hourly'
+        ? 'Hourly · \$$amountText/hr'
+        : 'Salary · \$$amountText';
+  }
+}
+
 class Metric {
   const Metric({
     required this.label,

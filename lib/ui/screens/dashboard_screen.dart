@@ -11,6 +11,7 @@ import '../widgets/app_card.dart';
 import '../widgets/dashboard_date_range_picker.dart';
 import '../widgets/detail_matrices.dart';
 import '../widgets/trend_chart.dart';
+import '../../repositories/labor_directory_repository.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -478,30 +479,260 @@ class _CensusTab extends StatelessWidget {
   );
 }
 
-class _LaborTab extends StatelessWidget {
+class _LaborTab extends StatefulWidget {
   const _LaborTab({required this.data});
 
   final DashboardData data;
 
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      _MetricGrid(metrics: data.metrics.skip(2).toList()),
-      const SizedBox(height: 24),
-      _TrendCard(
-        title: 'Labor cost by day',
-        value: formatCurrency(data.totalLaborCost),
-        detail:
-            '${data.totalLaborHours.toStringAsFixed(0)} hours · ${data.reportedDayCount}/${data.expectedDayCount} days',
-        points: data.laborTrend,
-        color: AppTheme.orange,
-        axisFormat: TrendAxisFormat.currency,
+  State<_LaborTab> createState() => _LaborTabState();
+}
+
+class _LaborTabState extends State<_LaborTab> {
+  late Future<List<LaborDepartment>> _departments;
+  final Set<String> _selectedDepartmentCodes = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDepartments();
+  }
+
+  void _loadDepartments() {
+    _departments = context.read<LaborDirectoryRepository>().loadDepartments();
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<List<LaborDepartment>>(
+    future: _departments,
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const AppCard(
+          child: SizedBox(
+            height: 120,
+            child: Center(child: CircularProgressIndicator()),
+          ),
+        );
+      }
+      if (snapshot.hasError) {
+        return AppCard(
+          child: Row(
+            children: [
+              const Expanded(
+                child: Text('Could not load departments and employees.'),
+              ),
+              IconButton(
+                tooltip: 'Retry loading employees',
+                onPressed: () => setState(_loadDepartments),
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
+          ),
+        );
+      }
+
+      final departments = snapshot.data ?? const <LaborDepartment>[];
+      return Column(
+        children: [
+          const _LaborMetricsUnavailable(),
+          const SizedBox(height: 20),
+          _LaborChartUnavailable(
+            departments: departments,
+            selectedDepartmentCodes: _selectedDepartmentCodes,
+            onToggleAll: () => setState(() {
+              if (_selectedDepartmentCodes.length == departments.length) {
+                _selectedDepartmentCodes.clear();
+              } else {
+                _selectedDepartmentCodes
+                  ..clear()
+                  ..addAll(departments.map((department) => department.code));
+              }
+            }),
+          ),
+          const SizedBox(height: 20),
+          EmployeeLaborMatrix(
+            data: widget.data,
+            departments: departments,
+            selectedDepartmentCodes: _selectedDepartmentCodes,
+            onDepartmentSelectionChanged: (departmentCode, selected) {
+              setState(() {
+                if (selected) {
+                  _selectedDepartmentCodes.add(departmentCode);
+                } else {
+                  _selectedDepartmentCodes.remove(departmentCode);
+                }
+              });
+            },
+          ),
+        ],
+      );
+    },
+  );
+}
+
+class _LaborMetricsUnavailable extends StatelessWidget {
+  const _LaborMetricsUnavailable();
+
+  @override
+  Widget build(BuildContext context) => AppCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Labor metrics unavailable',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'No dated timekeeping or payroll amounts are available. '
+          'Labor hours, overtime, and costs are not calculated.',
+        ),
+        const SizedBox(height: 14),
+        const Wrap(
+          spacing: 28,
+          runSpacing: 12,
+          children: [
+            _UnavailableMetric(label: 'Labor cost'),
+            _UnavailableMetric(label: 'Worked hours'),
+            _UnavailableMetric(label: 'Overtime hours'),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+class _UnavailableMetric extends StatelessWidget {
+  const _UnavailableMetric({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 150,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 4),
+        const Text('—', style: TextStyle(fontSize: 24, color: AppTheme.muted)),
+      ],
+    ),
+  );
+}
+
+class _LaborChartUnavailable extends StatelessWidget {
+  const _LaborChartUnavailable({
+    required this.departments,
+    required this.selectedDepartmentCodes,
+    required this.onToggleAll,
+  });
+
+  final List<LaborDepartment> departments;
+  final Set<String> selectedDepartmentCodes;
+  final VoidCallback onToggleAll;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = departments
+        .where(
+          (department) => selectedDepartmentCodes.contains(department.code),
+        )
+        .toList();
+    final allSelected =
+        departments.isNotEmpty &&
+        selectedDepartmentCodes.length == departments.length;
+    final allHidden = selectedDepartmentCodes.isEmpty;
+    final allValue = allSelected
+        ? true
+        : allHidden
+        ? false
+        : null;
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Daily labor cost',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 18,
+            runSpacing: 8,
+            children: [
+              const _LaborLegendItem(label: 'Total', color: AppTheme.orange),
+              for (final department in selected)
+                _LaborLegendItem(
+                  label: department.name,
+                  color: _departmentColor(departments.indexOf(department)),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 160,
+            width: double.infinity,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppTheme.canvas,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: AppTheme.line),
+              ),
+              child: const Center(
+                child: Text(
+                  'Dated labor costs are unavailable; no lines can be plotted.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppTheme.muted),
+                ),
+              ),
+            ),
+          ),
+          Row(
+            children: [
+              Checkbox(
+                key: const ValueKey('toggle-all-departments'),
+                visualDensity: VisualDensity.compact,
+                tristate: true,
+                value: allValue,
+                onChanged: departments.isEmpty ? null : (_) => onToggleAll(),
+              ),
+              const Text('Show all departments'),
+            ],
+          ),
+        ],
       ),
-      const SizedBox(height: 24),
-      EmployeeLaborMatrix(data: data),
+    );
+  }
+}
+
+class _LaborLegendItem extends StatelessWidget {
+  const _LaborLegendItem({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 12,
+        height: 3,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(2),
+        ),
+      ),
+      const SizedBox(width: 6),
+      Text(label, style: Theme.of(context).textTheme.labelMedium),
     ],
   );
 }
+
+Color _departmentColor(int index) =>
+    HSLColor.fromAHSL(1, (index * 137.508) % 360, .62, .42).toColor();
 
 class _ExpenseTab extends StatelessWidget {
   const _ExpenseTab({required this.data});
